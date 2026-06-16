@@ -1,0 +1,39 @@
+version: '3.8'
+
+services: #サービスの中にappとdbを含める。そういう設計思想。実行順序とか。
+  app:
+    build: .
+    volumes:
+      - .:/app
+    ports:
+      - "8080:8080"
+    environment:
+      - GO111MODULE=on
+      # GoからMySQLへ接続するための接続文字列（DSN）
+      - DB_DSN=${DB_USER}:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?parseTime=true
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME} #ユーザの権限付与はDockerMySQLが勝手にやってくれるらしい。（広い範囲での権限なので注意は必要）
+      MYSQL_USER: ${DB_USER}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # ★【ここを追加！】ローカルの init.sql を、MySQLの初期化実行フォルダに送り込む
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    # Goコンテナが「DBの起動完了」を待ってから動くようにするためのヘルスチェック
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
