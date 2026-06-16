@@ -1,35 +1,36 @@
 package main
 
 import (
+	"archive/zip"
 	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"image"
 	"image/draw"
-	_ "image/png" // PNGのデコード機能を有効にするためのアンダーバーインポート
+	_ "image/png"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	_ "modernc.org/sqlite" // ★純Go製のSQLiteドライバ（CGO不要）
 )
 
 type Part struct {
-	ID        int       `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 type CelParameter struct {
-	ID        int       `json:"id"`
-	Yaw       float64   `json:"yaw"`
-	Pitch     float64   `json:"pitch"`
-	Roll      float64   `json:"roll"`
-	CreatedAt time.Time `json:"created_at"`
+	ID    int     `json:"id"`
+	Yaw   float64 `json:"yaw"`
+	Pitch float64 `json:"pitch"`
+	Roll  float64 `json:"roll"`
 }
 
 var db *sql.DB
@@ -58,13 +59,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("DB接続不可: %v", err)
 	}
-	log.Println("✅ MySQLとの疎通確認に成功しました！")
+	log.Println("✅ MySQLとの疎通確認に成功しました！!")
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "AnimeCelSystem - クリエイターアプリAPI（Step4）")
+		fmt.Fprintf(w, "AnimeCelSystem - クリエイターアプリAPI（完成版）")
 	})
 
-	http.HandleFunc("/api/upload", handleUpload)
+	http.HandleFunc("/api/upload", handleUpload) //POSTで。アクセスの際に情報を渡す
+	
+	// ★【新規追加】演者データビルド ＆ パッキングAPI こっちはGETでアクセスするだけでいい。
+	http.HandleFunc("/api/build", handleBuild)
 
 	log.Println("Server running on http://localhost:8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -72,6 +76,7 @@ func main() {
 	}
 }
 
+// --- [既存ロジック] アップロード ＆ .rgbaコンバート (Step4のまま変更なし) ---
 func handleUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -122,16 +127,13 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// フォルダ作成
 	targetDir := filepath.Join("./uploads", partName)
 	os.MkdirAll(targetDir, os.ModePerm)
 
-	// ファイル名の決定（拡張子以外は同じ）
 	baseFileName := fmt.Sprintf("%.2f_%.2f_%.2f", yaw, pitch, roll)
 	pngSavePath := filepath.Join(targetDir, baseFileName+".png")
 	rgbaSavePath := filepath.Join(targetDir, baseFileName+".rgba")
 
-	// 1. まずはPNGを物理保存
 	dst, err := os.Create(pngSavePath)
 	if err != nil {
 		http.Error(w, "ファイルの作成に失敗しました", http.StatusInternalServerError)
@@ -144,31 +146,26 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ファイルの保存に失敗しました", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("💾 PNG保存完了: %s\n", pngSavePath)
 
-	// ★【新規追加】2. 保存したPNGを読み込んで独自バイナリ(.rgba)に高速コンバート
 	err = convertPNGToRGBA(pngSavePath, rgbaSavePath)
 	if err != nil {
 		log.Printf("❌ RGBAコンバート失敗: %v", err)
 		http.Error(w, "独自バイナリへのコンバートに失敗しました", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("⚡ RGBAコンパイル完了: %s\n", rgbaSavePath)
+	log.Printf("💾 PNG/⚡RGBA 保存完了: %s\n", baseFileName)
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "Successfully uploaded, renamed, and compiled to %s.rgba", baseFileName)
 }
 
-// 【コアアルゴリズム】PNGからカスタムバイナリ(.rgba)を作成する関数
 func convertPNGToRGBA(pngPath, rgbaPath string) error {
-	// 1. PNGファイルを開く
 	f, err := os.Open(pngPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	// 2. 画像としてデコード
 	srcImg, _, err := image.Decode(f)
 	if err != nil {
 		return err
@@ -178,21 +175,15 @@ func convertPNGToRGBA(pngPath, rgbaPath string) error {
 	width := uint16(bounds.Dx())
 	height := uint16(bounds.Dy())
 
-	// 3. メモリ上に「アルファ非乗算(NRGBA)のきれいなキャンバス」を1枚用意する
-	// Unity側でテクスチャとしてそのまま綺麗に扱うための、Straight Alpha（ストレートアルファ）を保証するため
 	nrgbaImg := image.NewNRGBA(bounds)
-
-	// 4. 元の画像を、そのキャンバスに超高速で転写する（Goの内部最適化が走ります）
 	draw.Draw(nrgbaImg, bounds, srcImg, bounds.Min, draw.Src)
 
-	// 5. 書き出し用のバイナリファイルを作成
 	rgbaFile, err := os.Create(rgbaPath)
 	if err != nil {
 		return err
 	}
 	defer rgbaFile.Close()
 
-	// 6. ヘッダ情報（横幅・縦幅）をそれぞれ2バイト（リトルエンディアン）で書き込む
 	if err := binary.Write(rgbaFile, binary.LittleEndian, width); err != nil {
 		return err
 	}
@@ -200,11 +191,123 @@ func convertPNGToRGBA(pngPath, rgbaPath string) error {
 		return err
 	}
 
-	// 7. メモリ上のピクセル生データ配列（Pixスライス）を、一撃でファイルに書き出す
 	_, err = rgbaFile.Write(nrgbaImg.Pix)
+	return err
+}
+
+// --- ★[新規追加] Step 5: 演者データビルドコアロジック ---
+func handleBuild(w http.ResponseWriter, r *http.Request) {
+	log.Println("🎬 演者データビルド処理を開始します...") 
+
+	sqlitePath := "./avatar.db"
+	// 過去のビルド成果物があれば一度クリーンアップ
+	os.Remove(sqlitePath)
+
+	// 1. 動的SQLiteファイルの作成と接続（ドライバ名に "sqlite" を指定）
+	sqldb, err := sql.Open("sqlite", sqlitePath)
+	if err != nil {
+		log.Printf("SQLite作成失敗: %v", err)
+		http.Error(w, "演者用DBの作成に失敗しました", http.StatusInternalServerError)
+		return
+	}
+	defer sqldb.Close()
+
+	// 2. あなたが設計した通りの「2つの独立したテーブル」をSQLite内に作成
+	_, err = sqldb.Exec(`CREATE TABLE parts (id INTEGER PRIMARY KEY, name TEXT UNIQUE);`)
+	if err != nil {
+		log.Printf("SQLite partsテーブル作成失敗: %v", err)
+		http.Error(w, "DBスキーマの作成に失敗しました", http.StatusInternalServerError)
+		return
+	}
+	_, err = sqldb.Exec(`CREATE TABLE cel_parameters (id INTEGER PRIMARY KEY, yaw REAL, pitch REAL, roll REAL);`)
+	if err != nil {
+		log.Printf("SQLite cel_parametersテーブル作成失敗: %v", err)
+		http.Error(w, "DBスキーマの作成に失敗しました", http.StatusInternalServerError)
+		return
+	}
+
+	// 3. MySQLから「parts」データを全件抽出してSQLiteへ高速レプリケーション（移行）
+	pRows, err := db.Query("SELECT id, name FROM parts")
+	if err == nil {
+		defer pRows.Close()
+		for pRows.Next() {
+			var p Part
+			if err := pRows.Scan(&p.ID, &p.Name); err == nil {
+				_, _ = sqldb.Exec("INSERT INTO parts (id, name) VALUES (?, ?)", p.ID, p.Name)
+			}
+		}
+	}
+
+	// 4. MySQLから「cel_parameters」データを全件抽出してSQLiteへレプリケーション
+	cRows, err := db.Query("SELECT id, yaw, pitch, roll FROM cel_parameters")
+	if err == nil {
+		defer cRows.Close()
+		for cRows.Next() {
+			var c CelParameter
+			if err := cRows.Scan(&c.ID, &c.Yaw, &c.Pitch, &c.Roll); err == nil {
+				_, _ = sqldb.Exec("INSERT INTO cel_parameters (id, yaw, pitch, roll) VALUES (?, ?, ?, ?)", c.ID, c.Yaw, c.Pitch, c.Roll)
+			}
+		}
+	}
+	// コピー保証のため明示的にクローズ
+	sqldb.Close()
+	log.Println("📦 SQLite(avatar.db)へのデータ同期が完了しました")
+
+	// 5. Zipパッキング処理の開始（レスポンスに直接書き込むストリーミング形式）
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", "attachment; filename=avatar_package.zip")
+
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	// 5-A. 生成したばかりの avatar.db をZipに含める
+	err = addFileToZip(zipWriter, sqlitePath, "avatar.db")
+	if err != nil {
+		log.Printf("Zipへのavatar.db追加失敗: %v", err)
+		return
+	}
+
+	// 5-B. uploads/ フォルダ内をスキャンし、あなたの規約通り「.rgba」ファイルだけをZipへパッキング
+	// (元のPNG画像はクリエイターの作業用なので、演者用Zipには含めないスマート設計！)
+	err = filepath.Walk("./uploads", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// ディレクトリではなく、拡張子が .rgba のファイルのみを対象にする
+		if !info.IsDir() && strings.HasSuffix(info.Name(), ".rgba") {
+			// Zip内での配置パスを決定（例: uploads/body/0.00_0.00_0.00.rgba -> body/0.00_0.00_0.00.rgba）
+			relPath, err := filepath.Rel("./uploads", path)
+			if err != nil {
+				return err
+			}
+			return addFileToZip(zipWriter, path, relPath)
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("アセットのZipパッキング中にエラー: %v", err)
+		return
+	}
+
+	// 一時的なSQLiteファイルをローカルから削除（クリーンアップ）
+	os.Remove(sqlitePath)
+	log.Println("✨ 演者用Zipパッケージのビルド ＆ 出荷が正常に完了しました！")
+}
+
+// ファイルをZip構造体に書き込むヘルパー関数
+func addFileToZip(zw *zip.Writer, srcPath, destPath string) error {
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	writer, err := zw.Create(destPath)
 	if err != nil {
 		return err
 	}
 
-	return nil
+	_, err = io.Copy(writer, srcFile)
+	return err
 }
