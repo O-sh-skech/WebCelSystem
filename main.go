@@ -75,6 +75,7 @@ func main() {
 	http.Handle("/", fs)
 
 	log.Println("Server running on http://localhost:8080")
+	log.Println("Browser running on http://localhost:5173")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal(err)
 	}
