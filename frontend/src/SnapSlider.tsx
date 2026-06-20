@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 
 interface SnapSliderProps {
   label: string
@@ -7,22 +7,39 @@ interface SnapSliderProps {
 }
 
 export const SnapSlider: React.FC<SnapSliderProps> = ({ label, value, onChange }) => {
-  // スライダーの取り得る値（離散量）の定義
   const steps = [-1, 0, 1]
+  
+  // ドラッグ中の一時的な連続量を管理するローカル状態
+  const [localValue, setLocalValue] = useState(value)
+
+  // 親のデータ（パーツ切り替えなど）が変わったら、ローカル状態も同期する
+  useEffect(() => {
+    setLocalValue(value)
+  }, [value])
+
+  // マウスや指を離したときに、最も近いステップに吸着（ワープ）させる関数
+  const handleRelease = () => {
+    // -1, 0, 1 の中から、現在のlocalValueに最も近い値を計算
+    const closest = steps.reduce((prev, curr) => 
+      Math.abs(curr - localValue) < Math.abs(prev - localValue) ? curr : prev
+    )
+    setLocalValue(closest)
+    onChange(closest) // 親に確定値を報告
+  }
 
   return (
     <div style={{ marginBottom: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
         <span style={{ fontWeight: 'bold', color: '#aaa', fontSize: '14px' }}>{label}</span>
         <span style={{ color: '#4a90e2', fontWeight: 'bold', fontFamily: 'monospace' }}>
-          {value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1)}
+          {/* ドラッグ中はリアルタイムな数値を、離したら確定数値を表示 */}
+          {localValue > 0 ? `+${localValue.toFixed(2)}` : localValue.toFixed(2)}
         </span>
       </div>
 
-      {/* スライダー本体と「○」を重ねるためのコンテナ */}
       <div style={{ position: 'relative', height: '30px', display: 'flex', alignItems: 'center' }}>
         
-        {/* 1. 背景の線（—）とスナップ点（○）のレイヤー */}
+        {/* 背景の線と○のレイヤー */}
         <div style={{
           position: 'absolute',
           width: '100%',
@@ -32,10 +49,11 @@ export const SnapSlider: React.FC<SnapSliderProps> = ({ label, value, onChange }
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          pointerEvents: 'none' // スライダーの邪魔をしないように
+          pointerEvents: 'none'
         }}>
           {steps.map((step) => {
-            const isSelected = value === step
+            // 吸着予測位置（最も近い点）を光らせる
+            const isClosest = Math.abs(step - localValue) < 0.5
             return (
               <div
                 key={step}
@@ -43,11 +61,9 @@ export const SnapSlider: React.FC<SnapSliderProps> = ({ label, value, onChange }
                   width: '12px',
                   height: '12px',
                   borderRadius: '50%',
-                  // 現在選択されている値の「○」はアクティブカラー（青）にする
-                  backgroundColor: isSelected ? '#4a90e2' : '#666',
-                  border: isSelected ? '2px solid #fff' : '2px solid #2a2a35',
-                  transform: 'translateX(0px)',
-                  boxShadow: isSelected ? '0 0 8px #4a90e2' : 'none',
+                  backgroundColor: isClosest ? '#4a90e2' : '#666',
+                  border: isClosest ? '2px solid #fff' : '2px solid #2a2a35',
+                  boxShadow: isClosest ? '0 0 8px #4a90e2' : 'none',
                   transition: 'all 0.1s ease'
                 }}
               />
@@ -55,14 +71,16 @@ export const SnapSlider: React.FC<SnapSliderProps> = ({ label, value, onChange }
           })}
         </div>
 
-        {/* 2. 透明にしたネイティブスライダーを上に重ねる */}
+        {/* ネイティブスライダー（stepを細かくして滑らかに） */}
         <input
           type="range"
           min="-1"
           max="1"
-          step="1" // ★ここを1にすることで、-1, 0, 1 にしか止まらなくなる（スナップ操作の実現）
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
+          step="0.01" // ★滑らかに動かすために細かく設定
+          value={localValue}
+          onChange={(e) => setLocalValue(Number(e.target.value))}
+          onMouseUp={handleRelease}  // ★PC用：マウスを離した時
+          onTouchEnd={handleRelease} // ★スマホ・タブレット用：指を離した時
           style={{
             position: 'absolute',
             width: '100%',
@@ -76,31 +94,11 @@ export const SnapSlider: React.FC<SnapSliderProps> = ({ label, value, onChange }
         />
       </div>
 
-      {/* スライダー下のラベル */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#555', marginTop: '2px' }}>
         <span>左 / 下 (-1)</span>
         <span>正面 (0)</span>
         <span>右 / 上 (1)</span>
       </div>
-
-      {/* つまみ（Thumb）だけを綺麗に見せるためのグローバルCSSスタイル（簡易インライン適用） */}
-      <style>{`
-        .custom-range-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #ffffff;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-          cursor: pointer;
-          border: 3px solid #4a90e2;
-          transition: transform 0.1s;
-        }
-        .custom-range-slider::-webkit-slider-thumb:active {
-          transform: scale(1.2);
-        }
-      `}</style>
     </div>
   )
 }

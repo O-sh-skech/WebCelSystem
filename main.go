@@ -28,10 +28,11 @@ type Part struct {
 }
 
 type CelParameter struct {
-	ID    int     `json:"id"`
-	Yaw   float64 `json:"yaw"`
-	Pitch float64 `json:"pitch"`
-	Roll  float64 `json:"roll"`
+	ID       int     `json:"id,omitempty"`        // omitemptyを付けると、0（未設定）の時にJSONから自動で消えて綺麗になります
+	PartName string  `json:"part_name,omitempty"` // 🌟ここに追加！
+	Yaw      float64 `json:"yaw"`
+	Pitch    float64 `json:"pitch"`
+	Roll     float64 `json:"roll"`
 }
 
 var db *sql.DB
@@ -66,13 +67,14 @@ func main() {
 	http.HandleFunc("/api/upload", handleUpload)
 	http.HandleFunc("/api/build", handleBuild)
 	
-	// ★【新規追加】現在登録されているパラメータ一覧をJSONで返すAPI
-	http.HandleFunc("/api/parameters", handleGetParameters)
+	// ★【新規追加】現在登録されているパラメータ一覧をJSONで返すAPI　
+	http.HandleFunc("/api/progress", handleGetProgress)
 
 	// ★【新規追加】frontend フォルダ内のHTML/CSS/JSをルートURLで配信する設定
 	// これにより http://localhost:8080/ でUI画面が開くようになります
 	fs := http.FileServer(http.Dir("./frontend"))
 	http.Handle("/", fs)
+
 
 	log.Println("Server running on http://localhost:8080")
 	log.Println("Browser running on http://localhost:5173")
@@ -81,96 +83,200 @@ func main() {
 	}
 }
 
-func handleGetParameters(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
+// DBから現在の中間テーブルの関係性をすべて取得してフロントに返すAPI
+func handleGetProgress(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 
-    rows, err := db.Query("SELECT id, yaw, pitch, roll FROM cel_parameters")
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
-    defer rows.Close()
+	rows, err := db.Query(`
+		SELECT p.name, cp.yaw, cp.pitch, cp.roll 
+		FROM cel_assets ca
+		JOIN parts p ON ca.part_id = p.id
+		JOIN cel_parameters cp ON ca.parameter_id = cp.id
+	`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
 
-    var list []CelParameter
+	var progressList []CelParameter = []CelParameter{} // フロントで扱いやすいよう空配列で初期化
+	for rows.Next() {
+		var p CelParameter
+		if err := rows.Scan(&p.PartName, &p.Yaw, &p.Pitch, &p.Roll); err == nil {
+			progressList = append(progressList, p)
+		}
+	}
 
-    for rows.Next() {
-        var c CelParameter
-        if err := rows.Scan(&c.ID, &c.Yaw, &c.Pitch, &c.Roll); err == nil {
-            list = append(list, c)
-        }
-    }
-
-    json.NewEncoder(w).Encode(list)
+	json.NewEncoder(w).Encode(progressList)
 }
 
-// --- 以下、既存の handleUpload, convertPNGToRGBA, handleBuild, addFileToZip はそのまま維持 ---
+// --- handleUpload の書き換え ---
 func handleUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	err := r.ParseMultipartForm(32 << 20)
 	if err != nil {
-		http.Error(w, "フォームデータの解析に失敗しました", http.StatusBadRequest)
+		http.Error(w, "フォームデータの解析に失敗しました。", http.StatusBadRequest)
 		return
 	}
+
 	partName := r.FormValue("part_name")
-	yawStr := r.FormValue("yaw")
-	pitchStr := r.FormValue("pitch")
-	rollStr := r.FormValue("roll")
-	yaw, err1 := strconv.ParseFloat(yawStr, 64)
-	pitch, err2 := strconv.ParseFloat(pitchStr, 64)
-	roll, err3 := strconv.ParseFloat(rollStr, 64)
+	yaw, err1 := strconv.ParseFloat(r.FormValue("yaw"), 64)
+	pitch, err2 := strconv.ParseFloat(r.FormValue("pitch"), 64)
+	roll, err3 := strconv.ParseFloat(r.FormValue("roll"), 64)
 	if partName == "" || err1 != nil || err2 != nil || err3 != nil {
 		http.Error(w, "不正なパラメータです", http.StatusBadRequest)
 		return
 	}
+
 	file, _, err := r.FormFile("image")
 	if err != nil {
 		http.Error(w, "画像の取得に失敗しました", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
-	var paramID int
-	err = db.QueryRow("SELECT id FROM cel_parameters WHERE yaw = ? AND pitch = ? AND roll = ?", yaw, pitch, roll).Scan(&paramID)
-	if err == sql.ErrNoRows {
-		res, err := db.Exec("INSERT INTO cel_parameters (yaw, pitch, roll) VALUES (?, ?, ?)", yaw, pitch, roll)
-		if err != nil {
-			log.Printf("DBインサートエラー: %v", err)
-			http.Error(w, "データベースへの座標登録に失敗しました", http.StatusInternalServerError)
-			return
-		}
-		id, _ := res.LastInsertId()
-		paramID = int(id)
-	} else if err != nil {
-		http.Error(w, "データベースエラーが発生しました", http.StatusInternalServerError)
+
+	// 🌟【Step 0, 1, 3】新設したDBヘルパー関数を呼び出す（今回は "INSERT" アクションを指定）
+	err = syncCelMetadata(partName, yaw, pitch, roll, "INSERT")
+	if err != nil {
+		log.Printf("❌ DB同期エラー: %v", err)
+		http.Error(w, "データベースの更新に失敗しました", http.StatusInternalServerError)
 		return
 	}
+
+	// ディレクトリの作成とPNGファイルの保存
 	targetDir := filepath.Join("./uploads", partName)
 	os.MkdirAll(targetDir, os.ModePerm)
 	baseFileName := fmt.Sprintf("%.2f_%.2f_%.2f", yaw, pitch, roll)
 	pngSavePath := filepath.Join(targetDir, baseFileName+".png")
-	rgbaSavePath := filepath.Join(targetDir, baseFileName+".rgba")
+
 	dst, err := os.Create(pngSavePath)
 	if err != nil {
 		http.Error(w, "ファイルの作成に失敗しました", http.StatusInternalServerError)
 		return
 	}
 	defer dst.Close()
-	_, err = io.Copy(dst, file)
-	if err != nil {
+
+	if _, err = io.Copy(dst, file); err != nil {
 		http.Error(w, "ファイルの保存に失敗しました", http.StatusInternalServerError)
 		return
 	}
-	err = convertPNGToRGBA(pngSavePath, rgbaSavePath)
-	if err != nil {
-		log.Printf("❌ RGBAコンバート失敗: %v", err)
-		http.Error(w, "独自バイナリへのコンバートに失敗しました", http.StatusInternalServerError)
-		return
-	}
+
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Successfully uploaded, renamed, and compiled to %s.rgba", baseFileName)
+	fmt.Fprintf(w, "「%s」として中間テーブルへの登録に成功し、%s に保存しました", partName, baseFileName+".png")
 }
+
+// 🌟【新規実装】DBへの検索・インサート・将来の拡張を担うコアヘルパー関数
+func syncCelMetadata(partName string, yaw, pitch, roll float64, action string) error {
+	// 初期値は 0（＝まだDBに見つかっていない状態）
+	partID := 0
+	paramID := 0
+
+	// ==========================================
+	// フェーズ 1: 純粋な検索（IDの特定のみを行う）
+	// ==========================================
+
+	// 1. parts テーブルの検索
+	err := db.QueryRow("SELECT id FROM parts WHERE name = ?", partName).Scan(&partID)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("parts検索失敗: %w", err)
+	}
+
+	// 2. cel_parameters テーブルの検索
+	err = db.QueryRow("SELECT id FROM cel_parameters WHERE yaw = ? AND pitch = ? AND roll = ?", yaw, pitch, roll).Scan(&paramID)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("parameters検索失敗: %w", err)
+	}
+
+	// ==========================================
+	// フェーズ 2: アクションに応じた処理の分岐
+	// ==========================================
+	switch action {
+	case "INSERT":
+		// 【パーツのインサート】
+		// 検索フェーズで ID が 0 のまま（見つからなかった）なら、ここで初めてインサートする
+		if partID == 0 {
+			res, err := db.Exec("INSERT INTO parts (name) VALUES (?)", partName)
+			if err != nil {
+				return fmt.Errorf("parts登録失敗: %w", err)
+			}
+			id, _ := res.LastInsertId()
+			partID = int(id)
+			log.Printf("🆕 parts に新しいパーツを登録しました: ID=%d (%s)", partID, partName)
+		}
+
+		// 【座標パラメータのインサート】
+		// 検索フェーズで ID が 0 のままなら、ここで初めてインサートする
+		if paramID == 0 {
+			res, err := db.Exec("INSERT INTO cel_parameters (yaw, pitch, roll) VALUES (?, ?, ?)", yaw, pitch, roll)
+			if err != nil {
+				return fmt.Errorf("parameters登録失敗: %w", err)
+			}
+			id, _ := res.LastInsertId()
+			paramID = int(id)
+			log.Printf("🆕 cel_parameters に新しい座標を登録しました: ID=%d (Y:%.2f, P:%.2f, R:%.2f)", paramID, yaw, pitch, roll)
+		}
+
+		// 【中間テーブル (cel_assets) への登録】
+		var dummy int
+		err = db.QueryRow("SELECT part_id FROM cel_assets WHERE part_id = ? AND parameter_id = ?", partID, paramID).Scan(&dummy)
+		if err == sql.ErrNoRows {
+			_, err = db.Exec("INSERT INTO cel_assets (part_id, parameter_id) VALUES (?, ?)", partID, paramID)
+			if err != nil {
+				return fmt.Errorf("中間テーブルへの登録失敗: %w", err)
+			}
+			log.Printf("🔗 中間テーブルにリレーションを記録しました: PartID=%d <-> ParamID=%d", partID, paramID)
+		}
+
+	case "UPDATE":
+		// 将来、名前変更などのUPDATE要求が来た時：
+		// もし partID == 0 なら「そもそも変更対象がないよ」と安全に弾くことができる！
+		if partID == 0 {
+			return fmt.Errorf("変更対象のパーツが見つかりません: %s", partName)
+		}
+		// ここに安全なUPDATE処理を書く
+
+	case "DELETE":
+		// 将来、削除要求が来た時：
+		// もし最初からデータがなければ、何もせず安全に終了できる
+		if partID == 0 || paramID == 0 {
+			log.Println("⚠️ 削除対象のデータが既に存在しません。処理をスキップします。")
+			return nil
+		}
+		// ここに安全なDELETE処理を書く
+	}
+
+	// ==========================================
+	// デバッグ用の中身全出力（変更なし）
+	// ==========================================
+	debugRows, dErr := db.Query(`
+		SELECT p.name, cp.yaw, cp.pitch, cp.roll 
+		FROM cel_assets ca
+		JOIN parts p ON ca.part_id = p.id
+		JOIN cel_parameters cp ON ca.parameter_id = cp.id
+	`)
+	if dErr == nil {
+		log.Println("📊 [DB DEBUG] 現在の中間テーブル (cel_assets) の中身:")
+		for debugRows.Next() {
+			var pname string
+			var y, p, r float64
+			if err := debugRows.Scan(&pname, &y, &p, &r); err == nil {
+				log.Printf("  🔹 [関係成立] Part: %s | 座標: (Y:%.2f, P:%.2f, R:%.2f)", pname, y, p, r)
+			}
+		}
+		log.Println("==================================================")
+		debugRows.Close()
+	}
+
+	return nil
+}
+
+
+
+
 func convertPNGToRGBA(pngPath, rgbaPath string) error {
 	f, err := os.Open(pngPath)
 	if err != nil {
