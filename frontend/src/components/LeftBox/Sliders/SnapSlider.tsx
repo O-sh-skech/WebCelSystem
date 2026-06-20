@@ -1,38 +1,35 @@
 import React, { useState, useEffect } from 'react'
+import './Slider.css'
 
 interface SnapSliderProps {
   label: string
   value: number
   onChange: (val: number) => void
+  sliderColor: string // 🌟 親から引き継いだ進捗色（グレー、黄、緑）
 }
 
-export const SnapSlider: React.FC<SnapSliderProps> = ({ label, value, onChange }) => {
+export const SnapSlider: React.FC<SnapSliderProps> = ({ label, value, onChange, sliderColor }) => {
   const steps = [-1, 0, 1]
-  
-  // ドラッグ中の一時的な連続量を管理するローカル状態
   const [localValue, setLocalValue] = useState(value)
 
-  // 親のデータ（パーツ切り替えなど）が変わったら、ローカル状態も同期する
   useEffect(() => {
     setLocalValue(value)
   }, [value])
 
-  // マウスや指を離したときに、最も近いステップに吸着（ワープ）させる関数
   const handleRelease = () => {
-    // -1, 0, 1 の中から、現在のlocalValueに最も近い値を計算
     const closest = steps.reduce((prev, curr) => 
       Math.abs(curr - localValue) < Math.abs(prev - localValue) ? curr : prev
     )
     setLocalValue(closest)
-    onChange(closest) // 親に確定値を報告
+    onChange(closest)
   }
 
   return (
     <div style={{ marginBottom: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
         <span style={{ fontWeight: 'bold', color: '#aaa', fontSize: '14px' }}>{label}</span>
-        <span style={{ color: '#4a90e2', fontWeight: 'bold', fontFamily: 'monospace' }}>
-          {/* ドラッグ中はリアルタイムな数値を、離したら確定数値を表示 */}
+        {/* 🌟 テキストの色も、現在の進捗色に合わせて光るように連動 */}
+        <span style={{ color: sliderColor, fontWeight: 'bold', fontFamily: 'monospace', transition: 'color 0.3s' }}>
           {localValue > 0 ? `+${localValue.toFixed(2)}` : localValue.toFixed(2)}
         </span>
       </div>
@@ -52,7 +49,6 @@ export const SnapSlider: React.FC<SnapSliderProps> = ({ label, value, onChange }
           pointerEvents: 'none'
         }}>
           {steps.map((step) => {
-            // 吸着予測位置（最も近い点）を光らせる
             const isClosest = Math.abs(step - localValue) < 0.5
             return (
               <div
@@ -61,36 +57,32 @@ export const SnapSlider: React.FC<SnapSliderProps> = ({ label, value, onChange }
                   width: '12px',
                   height: '12px',
                   borderRadius: '50%',
+                  // 🌟 吸着したドットの輝きも、現在の進捗色に合わせる！
                   backgroundColor: isClosest ? '#4a90e2' : '#666',
                   border: isClosest ? '2px solid #fff' : '2px solid #2a2a35',
                   boxShadow: isClosest ? '0 0 8px #4a90e2' : 'none',
-                  transition: 'all 0.1s ease'
+                  transition: 'all 0.3s ease'
                 }}
               />
             )
           })}
         </div>
 
-        {/* ネイティブスライダー（stepを細かくして滑らかに） */}
+        {/* ネイティブスライダー */}
         <input
           type="range"
           min="-1"
           max="1"
-          step="0.01" // ★滑らかに動かすために細かく設定
+          step="0.01"
           value={localValue}
           onChange={(e) => setLocalValue(Number(e.target.value))}
-          onMouseUp={handleRelease}  // ★PC用：マウスを離した時
-          onTouchEnd={handleRelease} // ★スマホ・タブレット用：指を離した時
-          style={{
-            position: 'absolute',
-            width: '100%',
-            margin: 0,
-            cursor: 'pointer',
-            WebkitAppearance: 'none',
-            background: 'transparent',
-            zIndex: 2
-          }}
+          onMouseUp={handleRelease}
+          onTouchEnd={handleRelease}
           className="custom-range-slider"
+          style={{
+            // 🌟 ここが今回の魔法！ReactのStateの色を、CSSカスタムプロパティとしてinputに強引にドロップ！
+            '--thumb-color': sliderColor
+          } as React.CSSProperties}
         />
       </div>
 

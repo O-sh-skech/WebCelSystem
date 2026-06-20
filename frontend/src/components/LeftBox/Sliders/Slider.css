@@ -1,0 +1,57 @@
+/* ==========================================
+   ネイティブスライダー本体の基本リセット
+   ========================================== */
+.custom-range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  margin: 0;
+  cursor: pointer;
+  background: transparent;
+  position: absolute;
+  z-index: 2;
+  outline: none;
+}
+
+/* ==========================================
+   🌟 Chrome / Safari / Edge 用のつまみ（ノブ）
+   ========================================== */
+.custom-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #fff; /* 白いフチで引き締める */
+  
+  /* 🌟 React側から渡される CSS変数 (--thumb-color) を読み込む。無ければデフォルトで青 */
+  background-color: var(--thumb-color, #4a90e2);
+  
+  /* 🌟 つまみの周りをネオンのようにボカして光らせる */
+  box-shadow: 0 0 10px var(--thumb-color, rgba(74, 144, 226, 0.6));
+  
+  /* 色変化をヌルッと滑らかにするアニメーション */
+  transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.1s ease;
+}
+
+/* つまみを掴んだ（ドラッグした）瞬間に、ちょっとだけ大きくする演出 */
+.custom-range-slider:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+/* ==========================================
+   🌟 Firefox 用のつまみ（ノブ）
+   ========================================== */
+.custom-range-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background-color: var(--thumb-color, #4a90e2);
+  box-shadow: 0 0 10px var(--thumb-color, rgba(74, 144, 226, 0.6));
+  transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.1s ease;
+}
+
+.custom-range-slider:active::-moz-range-thumb {
+  transform: scale(1.15);
+}

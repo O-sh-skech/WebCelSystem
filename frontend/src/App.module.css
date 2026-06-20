@@ -1,0 +1,48 @@
+.app {
+  padding: 30px 20px;
+  font-family: sans-serif;
+  background-color: #1e1e24;
+  color: #fff;
+  min-height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.workspaceContainer {
+  max-width: 1100px;
+  width: 100%;
+}
+
+.appHeader {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.appTitle{
+  color: #4a90e2;
+  margin: 0 0 5px 0;
+  font-size: 24px ;
+}
+
+.appSubtitle{
+  color: #888;
+  margin: 0;
+  font-size: 13px ;
+}
+
+.editorLayout {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  margin-top: 20px;
+}
+
+@media (min-width: 850px) {
+  .editorLayout {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}
