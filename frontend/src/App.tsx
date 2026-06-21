@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { LeftBox } from './components/LeftBox/LeftBox' 
-import { RightBox } from './components/RightBox/RightBox'  
+import { RightBox } from './components/RightBox/RightBox' 
+import "@fontsource/pixelify-sans/700.css"; 
 import styles from './App.module.css'
 
 interface CelParameter {
+  id : number
   part_name: string
   yaw: number
   pitch: number
@@ -74,23 +76,22 @@ function App() {
     }
   }
 
-  // 🌟【心臓部】現在の座標の進捗ステータスを割り出す
+  // 🌟【心臓部：超スリム版】IDを見てメッセージを出し分けるだけ！
   const getProgressStatus = () => {
-    const matchedAssets = progressList.filter(
+    const currentData = progressList.find(
       (p) => p.yaw === sliderValues.yaw && p.pitch === sliderValues.pitch && p.roll === sliderValues.roll
     )
 
-    if (matchedAssets.length === 0) {
-      return { color: '#555', text: '未着手 (画像なし)' } // グレー
+    // 1. データがない ➔ グレー
+    if (!currentData) {
+      return { color: '#555', text: '未着手 (画像なし)' }
     }
 
-    const uploadedPartNames = matchedAssets.map((p) => p.part_name)
-    const isAllComplete = allParts.every((part) => uploadedPartNames.includes(part))
-
-    if (isAllComplete) {
+    // 2. IDだけで無駄なくスピード判定！
+    if (currentData.id === 1) {
       return { color: '#2ecc71', text: '完全完了 (全パーツ配置済み)' } // 緑
     } else {
-      return { color: '#f1c40f', text: `一部完了 (${uploadedPartNames.join(', ')} 配置済み)` } // 黄
+      return { color: '#f1c40f', text: '一部完了 (未配置のパーツあり)' } // 黄（テキストが常にスッキリ！）
     }
   }
 
@@ -104,7 +105,7 @@ function App() {
 
       <div className={styles.workspaceContainer}>
         <header className={styles.appHeader}>
-          <h1 className={styles.appTitle}>🎬 AnimeCelSystem</h1>
+          <h1 className={styles.appTitle}>AnimeCelSystem</h1>
           <p className={styles.appSubtitle}>クリエイター向け・空間オーサリングコンソール</p>
         </header>
 

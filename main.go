@@ -84,14 +84,24 @@ func main() {
 }
 
 // DBから現在の中間テーブルの関係性をすべて取得してフロントに返すAPI
+// DBから現在の中間テーブルの関係性を集計してフロントに返すAPI
 func handleGetProgress(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// 1. 🌟 まず現在の「登録されているパーツの総数」を動的に取得する（拡張性対策）
+	var totalPartsCount int
+	err := db.QueryRow("SELECT COUNT(*) FROM parts").Scan(&totalPartsCount)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. 🌟 座標ごとに「登録されているパーツの数」を集計して取得する
 	rows, err := db.Query(`
-		SELECT p.name, cp.yaw, cp.pitch, cp.roll 
-		FROM cel_assets ca
-		JOIN parts p ON ca.part_id = p.id
-		JOIN cel_parameters cp ON ca.parameter_id = cp.id
+		SELECT cp.yaw, cp.pitch, cp.roll, COUNT(ca.part_id) as asset_count
+		FROM cel_parameters cp
+		JOIN cel_assets ca ON cp.id = ca.parameter_id
+		GROUP BY cp.id, cp.yaw, cp.pitch, cp.roll
 	`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -99,17 +109,24 @@ func handleGetProgress(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var progressList []CelParameter = []CelParameter{} // フロントで扱いやすいよう空配列で初期化
+	var progressList []CelParameter = []CelParameter{}
 	for rows.Next() {
 		var p CelParameter
-		if err := rows.Scan(&p.PartName, &p.Yaw, &p.Pitch, &p.Roll); err == nil {
+		var assetCount int
+
+		if err := rows.Scan(&p.Yaw, &p.Pitch, &p.Roll, &assetCount); err == nil {
+			// 3. 🌟 動的に取得したパーツ総数と一致するかでステータスIDを決定！
+			if assetCount == totalPartsCount {
+				p.ID = 1 // 完全完了（すべてのパーツが揃っている）
+			} else {
+				p.ID = 0 // 未完了 / 一部完了
+			}
 			progressList = append(progressList, p)
 		}
 	}
 
 	json.NewEncoder(w).Encode(progressList)
 }
-
 // --- handleUpload の書き換え ---
 func handleUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

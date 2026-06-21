@@ -1,6 +1,6 @@
 .app {
   padding: 30px 20px;
-  font-family: sans-serif;
+  font-family: "Pixelify Sans", sans-serif;
   background-color: #1e1e24;
   color: #fff;
   min-height: 100vh;
@@ -20,11 +20,54 @@
   text-align: center;
 }
 
-.appTitle{
-  color: #4a90e2;
-  margin: 0 0 5px 0;
-  font-size: 24px ;
+.appTitle {
+  font-family: "Pixelify Sans", sans-serif;
+  font-size: clamp(4rem, 10vw, 8rem);
+  line-height: 1;
+
+  background-image:
+    /* pythonプログラムで出力したsvg_url */
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2016%2016%27%3E%3Cpath%20d%3D%27M1%2C1h1v1h-1zM11%2C2h1v1h-1zM3%2C3h1v1h-1zM12%2C3h1v1h-1zM14%2C4h1v1h-1zM13%2C5h1v1h-1zM2%2C6h1v1h-1zM8%2C6h1v1h-1zM6%2C7h1v1h-1zM0%2C11h1v1h-1zM9%2C11h1v1h-1zM4%2C13h1v1h-1zM9%2C13h1v1h-1zM13%2C13h1v1h-1zM5%2C14h1v1h-1zM4%2C15h1v1h-1zM12%2C15h1v1h-1z%27%20fill%3D%27%231e1e1e%27%3E%3Canimate%20attributeName%3D%27fill%27%20values%3D%27%231e1e1e%3B%237a7a7a%3B%23efefef%3B%237a7a7a%3B%231e1e1e%27%20dur%3D%273s%27%20begin%3D%270.0s%27%20repeatCount%3D%27indefinite%27%20/%3E%3C/path%3E%3Cpath%20d%3D%27M2%2C1h1v1h-1zM3%2C1h1v1h-1zM11%2C1h1v1h-1zM14%2C1h1v1h-1zM5%2C2h1v1h-1zM8%2C2h1v1h-1zM10%2C2h1v1h-1zM4%2C3h1v1h-1zM10%2C3h1v1h-1zM4%2C4h1v1h-1zM9%2C4h1v1h-1zM10%2C4h1v1h-1zM15%2C4h1v1h-1zM2%2C5h1v1h-1zM10%2C5h1v1h-1zM4%2C6h1v1h-1zM13%2C6h1v1h-1zM14%2C6h1v1h-1zM10%2C7h1v1h-1zM14%2C7h1v1h-1zM2%2C8h1v1h-1zM8%2C8h1v1h-1zM14%2C8h1v1h-1zM3%2C9h1v1h-1zM4%2C9h1v1h-1zM9%2C9h1v1h-1zM1%2C10h1v1h-1zM3%2C10h1v1h-1zM6%2C10h1v1h-1zM12%2C10h1v1h-1zM11%2C11h1v1h-1zM13%2C11h1v1h-1zM14%2C11h1v1h-1zM12%2C12h1v1h-1zM1%2C13h1v1h-1zM12%2C14h1v1h-1zM3%2C15h1v1h-1zM10%2C15h1v1h-1z%27%20fill%3D%27%23333333%27%3E%3Canimate%20attributeName%3D%27fill%27%20values%3D%27%231e1e1e%3B%237a7a7a%3B%23efefef%3B%237a7a7a%3B%231e1e1e%27%20dur%3D%273s%27%20begin%3D%270.2s%27%20repeatCount%3D%27indefinite%27%20/%3E%3C/path%3E%3Cpath%20d%3D%27M4%2C1h1v1h-1zM13%2C1h1v1h-1zM15%2C1h1v1h-1zM2%2C2h1v1h-1zM3%2C2h1v1h-1zM4%2C2h1v1h-1zM9%2C2h1v1h-1zM12%2C2h1v1h-1zM14%2C2h1v1h-1zM6%2C3h1v1h-1zM9%2C3h1v1h-1zM5%2C4h1v1h-1zM6%2C4h1v1h-1zM7%2C4h1v1h-1zM8%2C4h1v1h-1zM12%2C4h1v1h-1zM4%2C5h1v1h-1zM6%2C5h1v1h-1zM8%2C5h1v1h-1zM15%2C5h1v1h-1zM5%2C6h1v1h-1zM7%2C6h1v1h-1zM9%2C6h1v1h-1zM10%2C6h1v1h-1zM15%2C6h1v1h-1zM0%2C7h1v1h-1zM1%2C7h1v1h-1zM2%2C7h1v1h-1zM4%2C7h1v1h-1zM9%2C7h1v1h-1zM13%2C7h1v1h-1zM15%2C7h1v1h-1zM4%2C8h1v1h-1zM5%2C8h1v1h-1zM13%2C8h1v1h-1zM0%2C9h1v1h-1zM12%2C9h1v1h-1zM13%2C9h1v1h-1zM4%2C10h1v1h-1zM5%2C10h1v1h-1zM7%2C10h1v1h-1zM8%2C10h1v1h-1zM9%2C10h1v1h-1zM10%2C10h1v1h-1zM15%2C10h1v1h-1zM3%2C11h1v1h-1zM5%2C11h1v1h-1zM7%2C11h1v1h-1zM12%2C11h1v1h-1zM4%2C12h1v1h-1zM6%2C12h1v1h-1zM8%2C12h1v1h-1zM9%2C12h1v1h-1zM13%2C12h1v1h-1zM14%2C12h1v1h-1zM6%2C13h1v1h-1zM7%2C13h1v1h-1zM11%2C13h1v1h-1zM2%2C14h1v1h-1zM3%2C14h1v1h-1zM4%2C14h1v1h-1zM7%2C14h1v1h-1zM8%2C14h1v1h-1zM9%2C14h1v1h-1zM1%2C15h1v1h-1zM6%2C15h1v1h-1zM13%2C15h1v1h-1zM15%2C15h1v1h-1z%27%20fill%3D%27%234b4b4b%27%3E%3Canimate%20attributeName%3D%27fill%27%20values%3D%27%231e1e1e%3B%237a7a7a%3B%23efefef%3B%237a7a7a%3B%231e1e1e%27%20dur%3D%273s%27%20begin%3D%270.4s%27%20repeatCount%3D%27indefinite%27%20/%3E%3C/path%3E%3Cpath%20d%3D%27M0%2C1h1v1h-1zM6%2C1h1v1h-1zM1%2C2h1v1h-1zM0%2C3h1v1h-1zM2%2C3h1v1h-1zM15%2C3h1v1h-1zM2%2C4h1v1h-1zM0%2C5h1v1h-1zM3%2C5h1v1h-1zM9%2C5h1v1h-1zM12%2C5h1v1h-1zM14%2C5h1v1h-1zM0%2C6h1v1h-1zM11%2C6h1v1h-1zM5%2C7h1v1h-1zM12%2C7h1v1h-1zM0%2C8h1v1h-1zM6%2C8h1v1h-1zM11%2C8h1v1h-1zM6%2C9h1v1h-1zM14%2C9h1v1h-1zM2%2C10h1v1h-1zM6%2C11h1v1h-1zM1%2C12h1v1h-1zM2%2C12h1v1h-1zM3%2C12h1v1h-1zM10%2C12h1v1h-1zM15%2C12h1v1h-1zM2%2C13h1v1h-1zM10%2C13h1v1h-1zM14%2C13h1v1h-1zM10%2C14h1v1h-1zM13%2C14h1v1h-1zM14%2C14h1v1h-1zM11%2C15h1v1h-1z%27%20fill%3D%27%23626262%27%3E%3Canimate%20attributeName%3D%27fill%27%20values%3D%27%231e1e1e%3B%237a7a7a%3B%23efefef%3B%237a7a7a%3B%231e1e1e%27%20dur%3D%273s%27%20begin%3D%270.6s%27%20repeatCount%3D%27indefinite%27%20/%3E%3C/path%3E%3Cpath%20d%3D%27M7%2C1h1v1h-1zM12%2C1h1v1h-1zM6%2C2h1v1h-1zM13%2C2h1v1h-1zM1%2C3h1v1h-1zM13%2C3h1v1h-1zM13%2C4h1v1h-1zM11%2C5h1v1h-1zM3%2C6h1v1h-1zM3%2C7h1v1h-1zM7%2C7h1v1h-1zM12%2C8h1v1h-1zM7%2C9h1v1h-1zM11%2C9h1v1h-1zM14%2C10h1v1h-1zM4%2C11h1v1h-1zM5%2C12h1v1h-1zM7%2C12h1v1h-1zM0%2C13h1v1h-1zM11%2C14h1v1h-1zM15%2C14h1v1h-1zM2%2C15h1v1h-1zM7%2C15h1v1h-1z%27%20fill%3D%27%237a7a7a%27%3E%3Canimate%20attributeName%3D%27fill%27%20values%3D%27%231e1e1e%3B%237a7a7a%3B%23efefef%3B%237a7a7a%3B%231e1e1e%27%20dur%3D%273s%27%20begin%3D%270.8s%27%20repeatCount%3D%27indefinite%27%20/%3E%3C/path%3E%3C/svg%3E"),
+    
+    /* 下層グラデーション */
+    linear-gradient(
+      5deg,
+      #7dd3fc 0%,
+      #2563eb 35%,
+      #8b5cf6 70%,
+      #ec4899 100%
+    );
+
+  /* 💡 【重要】16マスの画像なので、1マス4pxにする場合は 16 × 4 ＝ 64px を指定します */
+  background-size: 2em 2em, 100% 200%;
+
+  background-blend-mode: overlay, normal;
+
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 2px #fff;
+
+  animation: logoGradient 10s steps(16) infinite;
 }
+
+@keyframes logoGradient {
+  0% {
+    background-position: 0 0, 50% 0%;
+  }
+  50% {
+    background-position: 0 0, 50% 100%;
+  }
+  100% {
+    background-position: 0 0, 50% 0%;
+  }
+}
+
+
+
+
+
+
 
 .appSubtitle{
   color: #888;
