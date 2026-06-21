@@ -66,9 +66,14 @@ func main() {
 	// --- API エンドポイントの設定 ---
 	http.HandleFunc("/api/upload", handleUpload)
 	http.HandleFunc("/api/build", handleBuild)
+
+	// 「/uploads/」へのアクセスを、サーバー内の「uploads」フォルダに直結させる設定
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 	
-	// ★【新規追加】現在登録されているパラメータ一覧をJSONで返すAPI　
+	// 現在の進捗状況をJSONで返すAPI　
 	http.HandleFunc("/api/progress", handleGetProgress)
+	// 現在の登録資産をJSONで返すAPI
+	http.HandleFunc("/api/assets", handleGetAssets)
 
 	// ★【新規追加】frontend フォルダ内のHTML/CSS/JSをルートURLで配信する設定
 	// これにより http://localhost:8080/ でUI画面が開くようになります
@@ -127,6 +132,42 @@ func handleGetProgress(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(progressList)
 }
+
+func handleGetAssets(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	rows, err := db.Query(`
+		SELECT p.name, cp.yaw, cp.pitch, cp.roll 
+		FROM cel_assets ca
+		JOIN parts p ON ca.part_id = p.id
+		JOIN cel_parameters cp ON ca.parameter_id = cp.id
+	`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var assetsList []CelParameter = []CelParameter{} // フロントで扱いやすいよう空配列で初期化
+	for rows.Next() {
+		var p CelParameter
+		if err := rows.Scan(&p.PartName, &p.Yaw, &p.Pitch, &p.Roll); err == nil {
+			assetsList = append(assetsList, p)
+		}
+	}
+	json.NewEncoder(w).Encode(assetsList)
+}
+
+
+
+
+
+
+
+
+
+
+
 // --- handleUpload の書き換え ---
 func handleUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

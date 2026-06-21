@@ -1,5 +1,6 @@
 import { SpaceSliders } from './Sliders/SpaceSliders'
 import styles from './LeftBox.module.css'
+import type { CelParameter } from '../Types/CelParameter'
 
 interface LeftBoxProps {
   allParts: string[]

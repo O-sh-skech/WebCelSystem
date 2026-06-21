@@ -3,14 +3,8 @@ import { LeftBox } from './components/LeftBox/LeftBox'
 import { RightBox } from './components/RightBox/RightBox' 
 import "@fontsource/pixelify-sans/700.css"; 
 import styles from './App.module.css'
+import type { CelParameter } from './components/Types/CelParameter'; 
 
-interface CelParameter {
-  id : number
-  part_name: string
-  yaw: number
-  pitch: number
-  roll: number
-}
 
 function App() {
   const allParts = ['body', 'eyes', 'mouth']
@@ -19,10 +13,10 @@ function App() {
   const [currentPart, setCurrentPart] = useState<string>('body')
   const [sliderValues, setSliderValues] = useState({ yaw: 0, pitch: 0, roll: 0 })
   const [progressList, setProgressList] = useState<CelParameter[]>([])
+  const [assetsList, setAssetsList] = useState<CelParameter[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string>('画像をドロップしてリネーム名を確認してください')
-  const [isDragging, setIsDragging] = useState<boolean>(false)
+  
 
   const fetchProgress = () => {
     fetch('/api/progress')
@@ -30,10 +24,19 @@ function App() {
       .then((data) => setProgressList(data || []))
       .catch((err) => console.error('進捗取得エラー:', err))
   }
+  const fetchAssets = () => {
+    fetch('/api/assets')
+      .then((res) => res.json())
+      .then((data) => setAssetsList(data || []))
+      .catch((err) => console.error('資産取得エラー:', err))
+  }
+
 
   useEffect(() => {
     fetchProgress()
+    fetchAssets()
   }, [])
+
 
   const handleSliderChange = (axis: 'yaw' | 'pitch' | 'roll', val: number) => {
     setSliderValues((prev) => ({ ...prev, [axis]: val }))
@@ -45,12 +48,20 @@ function App() {
       return
     }
     setSelectedFile(file)
-    setPreviewUrl(URL.createObjectURL(file))
+    // setPreviewUrl(URL.createObjectURL(file))
     setStatusMessage('📸 ローカルプレビューを表示中。確定ボタンで保存します。')
   }
 
-  const handleUploadSubmit = async () => {
-    if (!selectedFile) return
+  // 🌟 引数で file を直接受け取れるように拡張（RightBoxからの即時送信に対応）
+  const handleUploadSubmit = async (file?: File) => {
+    // 引数に file があればそれを使用し、無ければStateの selectedFile を使用する
+    const fileToUpload = file || selectedFile;
+
+    if (!fileToUpload) {
+      setStatusMessage('❌ ファイルが選択されていません')
+      return
+    }
+    
     setStatusMessage('⏳ Goサーバーへ送信中...')
 
     const formData = new FormData()
@@ -58,7 +69,7 @@ function App() {
     formData.append('yaw', sliderValues.yaw.toString())
     formData.append('pitch', sliderValues.pitch.toString())
     formData.append('roll', sliderValues.roll.toString())
-    formData.append('image', selectedFile)
+    formData.append('image', fileToUpload) 
 
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
@@ -66,8 +77,8 @@ function App() {
         const text = await res.text()
         setStatusMessage(`✅ ${text}`)
         setSelectedFile(null)
-        setPreviewUrl(null)
-        fetchProgress() // 最新状態をリロード
+        fetchProgress() // スライダーの進捗をリロード
+        fetchAssets()  
       } else {
         setStatusMessage('❌ サーバーエラーが発生しました')
       }
@@ -93,16 +104,16 @@ function App() {
     } else {
       return { color: '#f1c40f', text: '一部完了 (未配置のパーツあり)' } // 黄（テキストが常にスッキリ！）
     }
-  }
+    }
+    const currentStatus = getProgressStatus()
 
-  const currentStatus = getProgressStatus()
-  const expectedFileName = `${sliderValues.yaw.toFixed(2)}_${sliderValues.pitch.toFixed(2)}_${sliderValues.roll.toFixed(2)}.png`
+    
+
 
   return (
     <div className={styles.app}>
       
       
-
       <div className={styles.workspaceContainer}>
         <header className={styles.appHeader}>
           <h1 className={styles.appTitle}>AnimeCelSystem</h1>
@@ -116,26 +127,22 @@ function App() {
             currentPart={currentPart}
             setCurrentPart={(part) => {
               setCurrentPart(part)
-              setSelectedFile(null)
-              setPreviewUrl(null)
             }}
             sliderValues={sliderValues}
             onSliderChange={handleSliderChange}
             statusMessage={statusMessage}
-            sliderColor={currentStatus.color}
+            sliderColor={currentStatus.color} // 後にtxtもここに移動。
           />
 
           {/* 右コンポーネント：プレビューと送信処理 */}
           <RightBox
             currentPart={currentPart}
-            expectedFileName={expectedFileName}
-            isDragging={isDragging}
-            setIsDragging={setIsDragging}
-            previewUrl={previewUrl}
+            sliderValues={sliderValues}
+            assetsList = {assetsList}
             onFileSelect={handleFileSelect}
             onUploadSubmit={handleUploadSubmit}
             selectedFile={selectedFile}
-            currentStatusText={currentStatus.text}
+            
           />
         </div>
       </div>
