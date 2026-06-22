@@ -21,15 +21,22 @@ function App() {
   const fetchProgress = () => {
     fetch('/api/progress')
       .then((res) => res.json())
-      .then((data) => setProgressList(data || []))
+      .then((data) => {
+      console.log("proglesList",data);
+      setProgressList(data || []);
+      return data; // 次の then に渡したい場合
+      })
       .catch((err) => console.error('進捗取得エラー:', err))
   }
   const fetchAssets = () => {
-    fetch('/api/assets')
-      .then((res) => res.json())
-      .then((data) => setAssetsList(data || []))
-      .catch((err) => console.error('資産取得エラー:', err))
-  }
+  fetch('/api/assets')
+    .then((res) => res.json())
+    .then((data) => {
+      console.log("assetsList", data);
+      setAssetsList(data || []);
+    })
+    .catch((err) => console.error('資産取得エラー:', err))
+}
 
   useEffect(() => {
     fetchProgress()
@@ -76,6 +83,42 @@ function App() {
     }
   }
 
+  // 🌟【統一版】FormData形式でDeleteリクエストを送る関数
+  const handleDeleteSubmit = async (partName: string) => {
+    const confirmDelete = window.confirm(`現在の座標から「${partName}」の画像を削除しますか？`)
+    if (!confirmDelete) return
+
+    setStatusMessage('⏳ Goサーバーへ削除リクエスト送信中...')
+
+    // アップロードと完全に同じ「FormData」の箱を作る
+    const formData = new FormData()
+    formData.append('part_name', partName)
+    formData.append('yaw', sliderValues.yaw.toString())
+    formData.append('pitch', sliderValues.pitch.toString())
+    formData.append('roll', sliderValues.roll.toString())
+
+    try {
+      // ⚠️ FormDataを確実に届けるため、methodは「POST」で送信します
+      const res = await fetch('/api/delete', { 
+        method: 'POST', 
+        body: formData 
+      })
+
+      if (res.ok) {
+        console.log(`${partName} の削除に成功`)
+        setStatusMessage(`✅ ${partName.toUpperCase()} を削除しました`)
+        
+        // 状態を瞬時にリロード
+        fetchProgress() 
+        fetchAssets()  
+      } else {
+        setStatusMessage('❌ サーバー側で削除に失敗しました')
+      }
+    } catch (error) {
+      setStatusMessage('❌ 削除通信エラーが発生しました')
+    }
+  }
+
     
 
 
@@ -109,6 +152,7 @@ function App() {
             sliderValues={sliderValues}
             assetsList = {assetsList}
             onUploadSubmit={handleUploadSubmit}
+            onDeleteSubmit={handleDeleteSubmit}
             imageVersion = {imageVesion}      
           />
         </div>

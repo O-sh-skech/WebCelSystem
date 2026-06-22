@@ -9,6 +9,7 @@ interface RightBoxProps {
   assetsList: CelParameter[]
   onUploadSubmit: (file: File) => void 
   imageVersion: number
+  onDeleteSubmit: (partName: string) => void
 }
 
 // 🌟 レイヤーオブジェクトの型定義を追加
@@ -26,7 +27,8 @@ export function RightBox({
   sliderValues,
   assetsList,
   onUploadSubmit,
-  imageVersion
+  imageVersion,
+  onDeleteSubmit
 }: RightBoxProps) {
   console.log('RightBox render')
   const [isOpen, setIsOpen] = useState(false)
@@ -51,6 +53,10 @@ export function RightBox({
   }, [assetsList, imageVersion])
 
   const currentKey = createCoordinateKey(sliderValues.yaw, sliderValues.pitch, sliderValues.roll)
+
+  
+
+
   
   // 今の座標にあるレイヤーの初期リストを取得
   const initialLayers = useMemo(() => assetMap.get(currentKey) || [], [assetMap, currentKey])
@@ -77,15 +83,6 @@ export function RightBox({
     setOrderedLayers(updated)
   }
 
-  // 🌟 削除リクエスト（ダミー関数）
-  const handleDeleteAsset = (partName: string) => {
-    const confirmDelete = window.confirm(`現在の座標から「${partName}」を削除しますか？(API未接続)`)
-    if (confirmDelete) {
-      console.log(`🗑️ 削除リクエスト送信対象 -> パーツ: ${partName}, 座標: ${currentKey}`)
-      // 今後ここに fetch('/api/delete', ...) を追加します
-    }
-  }
-
   const expectedFileName = `${currentKey}.png`
 
   const handleUploadButtonClick = () => {
@@ -100,6 +97,17 @@ export function RightBox({
     }
     input.click()
   }
+
+  console.log("ログ",{
+    currentKey,
+    assetsList,
+    assetMap: [...assetMap.entries()],
+    initialLayers,
+    orderedLayers
+  })
+
+
+
 
   return (
     <div className={styles.container}>
@@ -201,7 +209,7 @@ export function RightBox({
 
                       {/* 🗑️ 個別デリートボタン */}
                       <button
-                        onClick={() => handleDeleteAsset(layer.partName)}
+                        onClick={() => onDeleteSubmit(layer.partName)}
                         style={{
                           padding: '2px 8px',
                           backgroundColor: '#d9534f',

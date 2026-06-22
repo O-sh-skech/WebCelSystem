@@ -65,6 +65,7 @@ func main() {
 
 	// --- API エンドポイントの設定 ---
 	http.HandleFunc("/api/upload", handleUpload)
+    http.HandleFunc("/api/delete", handleDelete)
 	http.HandleFunc("/api/build", handleBuild)
 
 	// 「/uploads/」へのアクセスを、サーバー内の「uploads」フォルダに直結させる設定
@@ -227,6 +228,63 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "「%s」として中間テーブルへの登録に成功し、%s に保存しました", partName, baseFileName+".png")
 }
 
+// 🌟 変更点：DeleteRequest 構造体の定義は【完全に削除】してOKです！
+
+func handleDelete(w http.ResponseWriter, r *http.Request) {
+    // 1. メソッドチェック（POSTに変更）
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    // 2. アップロードと全く同じフォームデータの解析
+    err := r.ParseMultipartForm(32 << 20)
+    if err != nil {
+        http.Error(w, "フォームデータの解析に失敗しました。", http.StatusBadRequest)
+        return
+    }
+
+    // 3. 構造体を使わず、その場で1行ずつスマートに引っこ抜く！
+    partName := r.FormValue("part_name")
+    yaw, err1 := strconv.ParseFloat(r.FormValue("yaw"), 64)
+    pitch, err2 := strconv.ParseFloat(r.FormValue("pitch"), 64)
+    roll, err3 := strconv.ParseFloat(r.FormValue("roll"), 64)
+
+    if partName == "" || err1 != nil || err2 != nil || err3 != nil {
+        http.Error(w, "不正なパラメータです", http.StatusBadRequest)
+        return
+    }
+
+    log.Printf("🎬 削除リクエストを受信: Part=%s, Y:%.2f, P:%.2f, R:%.2f", partName, yaw, pitch, roll)
+
+    // ==========================================
+    // ステップ 1: 実際の画像ファイルをサーバーから消す
+    // ==========================================
+    fileName := fmt.Sprintf("%.2f_%.2f_%.2f.png", yaw, pitch, roll)
+    filePath := filepath.Join("uploads", partName, fileName)
+    
+    if err := os.Remove(filePath); err != nil {
+        log.Printf("⚠️ ファイルの物理削除をスキップ (存在しないか削除済): %v", err)
+    } else {
+        log.Printf("💾 サーバー内ファイルを物理削除しました: %s", filePath)
+    }
+
+    // ==========================================
+    // ステップ 2: コアヘルパー関数を呼び出してDBから消す
+    // ==========================================
+    err = syncCelMetadata(partName, yaw, pitch, roll, "DELETE")
+    if err != nil {
+        log.Printf("❌ DB削除処理に失敗: %v", err)
+        http.Error(w, "Internal server error", http.StatusInternalServerError)
+        return
+    }
+
+    w.WriteHeader(http.StatusOK)
+    fmt.Fprintf(w, "「%s」のメタデータおよびファイルの削除に成功しました", partName)
+}
+
+
+
 // 🌟【新規実装】DBへの検索・インサート・将来の拡張を担うコアヘルパー関数
 func syncCelMetadata(partName string, yaw, pitch, roll float64, action string) error {
 	// 初期値は 0（＝まだDBに見つかっていない状態）
@@ -298,13 +356,42 @@ func syncCelMetadata(partName string, yaw, pitch, roll float64, action string) e
 		// ここに安全なUPDATE処理を書く
 
 	case "DELETE":
-		// 将来、削除要求が来た時：
-		// もし最初からデータがなければ、何もせず安全に終了できる
-		if partID == 0 || paramID == 0 {
-			log.Println("⚠️ 削除対象のデータが既に存在しません。処理をスキップします。")
-			return nil
-		}
-		// ここに安全なDELETE処理を書く
+        // もし最初からデータがなければ、何もせず安全に終了できる
+        if partID == 0 || paramID == 0 {
+            log.Println("⚠️ 削除対象のデータが既に存在しません。処理をスキップします。")
+            return nil
+        }
+
+        // 1. 【中間テーブル (cel_assets) からのリレーション削除】
+        // パーツID と 座標ID の組み合わせを中間テーブルから削除する
+        _, err = db.Exec("DELETE FROM cel_assets WHERE part_id = ? AND parameter_id = ?", partID, paramID)
+        if err != nil {
+            return fmt.Errorf("中間テーブルからの削除失敗: %w", err)
+        }
+        log.Printf("🗑️ 中間テーブルからリレーションを削除しました: PartID=%d <-> ParamID=%d", partID, paramID)
+
+        // ----------------------------------------------------
+        // 🌟 将来のためのクリーンアップ（オプショナル）
+        // ----------------------------------------------------
+        // ※ もし「誰も使っていないパーツや座標」をDBから完全に掃除したい場合、
+        // 以下のロジックを有効にすると、DBが常に綺麗な状態に保たれます。
+
+        // 【パーツのクリーンアップ】
+        // このパーツが他の中間テーブルで一切使われていないかチェック
+        var count int
+        _ = db.QueryRow("SELECT COUNT(*) FROM cel_assets WHERE part_id = ?", partID).Scan(&count)
+        if count == 0 {
+         //   _, _ = db.Exec("DELETE FROM parts WHERE id = ?", partID)
+            log.Printf("🧹 誰からも使われていないため、parts からパーツを削除しました、というデモ、将来的にはSave as Zipのタイミングで聞いてOKだったら消去: ID=%d", partID)
+        }
+
+        // 【座標のクリーンアップ】
+        // この座標が他の中間テーブルで一切使われていないかチェック
+        _ = db.QueryRow("SELECT COUNT(*) FROM cel_assets WHERE parameter_id = ?", paramID).Scan(&count)
+        if count == 0 {
+            _, _ = db.Exec("DELETE FROM cel_parameters WHERE id = ?", paramID)
+            log.Printf("🧹 誰からも使われていないため、cel_parameters から座標を削除しました: ID=%d", paramID)
+        }
 	}
 
 	// ==========================================
