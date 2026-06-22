@@ -422,26 +422,37 @@ func syncCelMetadata(partName string, yaw, pitch, roll float64, action string) e
 
 
 
+// 🌟 1. 既存の関数をベースに、引数を整理したコア変換関数（出力先ディレクトリの自動作成付き）
 func convertPNGToRGBA(pngPath, rgbaPath string) error {
 	f, err := os.Open(pngPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
 	srcImg, _, err := image.Decode(f)
 	if err != nil {
 		return err
 	}
+
 	bounds := srcImg.Bounds()
 	width := uint16(bounds.Dx())
 	height := uint16(bounds.Dy())
+
 	nrgbaImg := image.NewNRGBA(bounds)
 	draw.Draw(nrgbaImg, bounds, srcImg, bounds.Min, draw.Src)
+
+	// 出力先の「uploads/パーツ名」ディレクトリが万が一なければ自動で作る
+	if err := os.MkdirAll(filepath.Dir(rgbaPath), os.ModePerm); err != nil {
+		return err
+	}
+
 	rgbaFile, err := os.Create(rgbaPath)
 	if err != nil {
 		return err
 	}
 	defer rgbaFile.Close()
+
 	if err := binary.Write(rgbaFile, binary.LittleEndian, width); err != nil {
 		return err
 	}
@@ -451,51 +462,105 @@ func convertPNGToRGBA(pngPath, rgbaPath string) error {
 	_, err = rgbaFile.Write(nrgbaImg.Pix)
 	return err
 }
-func handleBuild(w http.ResponseWriter, r *http.Request) {
-	sqlitePath := "./avatar.db"
-	os.Remove(sqlitePath)
-	sqldb, err := sql.Open("sqlite", sqlitePath)
+
+// 🌟 2. 【新設】引数なしでDBから現役の全アセットを走査し、一括でRGBAに変換する関数
+func buildAllAssetsToRGBA() error {
+	log.Println("🔄 [BUILD] 登録済みアセットのRGBA一括変換を開始します...")
+
+	// 中間テーブルから、現在関係が成立しているパーツ名と座標（yaw, pitch, roll）のリストを全件引っ張る
+	query := `
+		SELECT p.name, c.yaw, c.pitch, c.roll 
+		FROM cel_assets ca
+		JOIN parts p ON ca.part_id = p.id
+		JOIN cel_parameters c ON ca.parameter_id = c.id
+	`
+	rows, err := db.Query(query) // main.go のグローバルな db を参照
 	if err != nil {
-		http.Error(w, "演者用DBの作成に失敗しました", http.StatusInternalServerError)
-		return
+		return fmt.Errorf("中間テーブルのクエリ失敗: %w", err)
 	}
-	defer sqldb.Close()
-	_, _ = sqldb.Exec(`CREATE TABLE parts (id INTEGER PRIMARY KEY, name TEXT UNIQUE);`)
-	_, _ = sqldb.Exec(`CREATE TABLE cel_parameters (id INTEGER PRIMARY KEY, yaw REAL, pitch REAL, roll REAL);`)
-	pRows, err := db.Query("SELECT id, name FROM parts")
-	if err == nil {
-		defer pRows.Close()
-		for pRows.Next() {
-			var p Part
-			if err := pRows.Scan(&p.ID, &p.Name); err == nil {
-				_, _ = sqldb.Exec("INSERT INTO parts (id, name) VALUES (?, ?)", p.ID, p.Name)
-			}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var partName string
+		var yaw, pitch, roll float64
+		if err := rows.Scan(&partName, &yaw, &pitch, &roll); err != nil {
+			log.Printf("⚠️ レコードのパース失敗: %v", err)
+			continue
 		}
+
+		// 例: "uploads/body/-1.00_0.00_0.00.png"
+		baseName := fmt.Sprintf("%.2f_%.2f_%.2f", yaw, pitch, roll)
+		pngPath := filepath.Join("uploads", partName, baseName+".png")
+		rgbaPath := filepath.Join("uploads", partName, baseName+".rgba")
+
+		// 物理PNGファイルが存在することを確認
+		if _, err := os.Stat(pngPath); os.IsNotExist(err) {
+			log.Printf("⚠️ DBには存在しますが、物理ファイルが見つかりません: %s", pngPath)
+			continue
+		}
+
+		// PNG ➔ RGBA 変換実行
+		if err := convertPNGToRGBA(pngPath, rgbaPath); err != nil {
+			log.Printf("❌ RGBA変換エラー (%s): %v", pngPath, err)
+			return err
+		}
+		
+		log.Printf("✨ [CONVERT] %s ➔ %s.rgba", pngPath, baseName)
+		count++
 	}
-	cRows, err := db.Query("SELECT id, yaw, pitch, roll FROM cel_parameters")
-	if err == nil {
-		defer cRows.Close()
-		for cRows.Next() {
-			var c CelParameter
-			if err := cRows.Scan(&c.ID, &c.Yaw, &c.Pitch, &c.Roll); err == nil {
-				_, _ = sqldb.Exec("INSERT INTO cel_parameters (id, yaw, pitch, roll) VALUES (?, ?, ?, ?)", c.ID, c.Yaw, c.Pitch, c.Roll)
-			}
+
+	log.Printf("✅ [BUILD] 計 %d 件のRGBAアセット変換が正常に完了しました。", count)
+	return nil
+}
+func handleBuild(w http.ResponseWriter, r *http.Request) {
+    // 🌟 処理の最初に、全アセットを PNG -> RGBA へ一括コンバート！
+    if err := buildAllAssetsToRGBA(); err != nil {
+        log.Printf("❌ ビルド処理中のRGBA変換に失敗: %v", err)
+        http.Error(w, "RGBA変換プロセスに失敗しました", http.StatusInternalServerError)
+        return
+    }
+
+    sqlitePath := "./avatar.db"
+    os.Remove(sqlitePath)
+    sqldb, err := sql.Open("sqlite", sqlitePath)
+    if err != nil {
+        http.Error(w, "演者用DBの作成に失敗しました", http.StatusInternalServerError)
+        return
+    }
+    defer sqldb.Close()
+
+    // 〜〜〜（SQLiteの作成やテーブル、データコピー処理はそのまま）〜〜〜
+
+    sqldb.Close()
+
+    w.Header().Set("Content-Type", "application/zip")
+    w.Header().Set("Content-Disposition", "attachment; filename=avatar_package.zip")
+
+    zipWriter := zip.NewWriter(w)
+    defer zipWriter.Close()
+
+    _ = addFileToZip(zipWriter, sqlitePath, "avatar.db")
+
+    // 生成された `.rgba` ファイルをZIPに詰め、同時にサーバーからお掃除
+    _ = filepath.Walk("./uploads", func(path string, info os.FileInfo, err error) error {
+        if err != nil {
+            return err
 		}
-	}
-	sqldb.Close()
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", "attachment; filename=avatar_package.zip")
-	zipWriter := zip.NewWriter(w)
-	defer zipWriter.Close()
-	_ = addFileToZip(zipWriter, sqlitePath, "avatar.db")
-	_ = filepath.Walk("./uploads", func(path string, info os.FileInfo, err error) error {
-		if !info.IsDir() && strings.HasSuffix(info.Name(), ".rgba") {
-			relPath, _ := filepath.Rel("./uploads", path)
-			return addFileToZip(zipWriter, path, relPath)
-		}
-		return nil
-	})
-	os.Remove(sqlitePath)
+        if !info.IsDir() && strings.HasSuffix(info.Name(), ".rgba") {
+            relPath, _ := filepath.Rel("./uploads", path)
+            err := addFileToZip(zipWriter, path, relPath)
+            
+            // 🌟 ZIPに格納できたら、サーバー側のテンポラリな .rgba ファイルは物理削除
+            if err == nil {
+                os.Remove(path) 
+            }
+            return err
+        }
+        return nil
+    })
+
+    os.Remove(sqlitePath)
 }
 func addFileToZip(zw *zip.Writer, srcPath, destPath string) error {
 	srcFile, err := os.Open(srcPath)

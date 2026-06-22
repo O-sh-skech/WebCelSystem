@@ -46,6 +46,49 @@ export function LeftBox({
     const sliderColor = progressStatus.color
     const partsMessage = progressStatus.text
 
+      //【新規実装】/api/build を叩いてZIPファイルをダウンロードする関数
+    const handleBuildZip = async () => {
+      // ユーザーに一言伝えて安心させる
+      const confirmBuild = window.confirm('現在のデータから演者用アバターパッケージ（ZIP）を出力しますか？')
+      if (!confirmBuild) return
+
+      console.log('📦 ビルド＆ZIP生成リクエストを送信します...')
+
+      try {
+        // 1. 引数なしでシンプルにエンドポイントを叩く
+        const res = await fetch('/api/build', {
+          method: 'POST', // Go側が受け取れるメソッド（GETでもPOSTでもルーターに合わせてOKです）
+        })
+
+        if (!res.ok) {
+          alert('❌ サーバー側でビルド処理に失敗しました')
+          return
+        }
+
+        // 2. 🌟重要: テキストではなく「Blob（バイナリの塊）」としてZIPデータを受け取る
+        const blob = await res.blob()
+
+        // 3. ブラウザ上に仮想のダウンロードリンクを作って、自動でクリックさせる技法
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'avatar_package.zip' // ダウンロードされるファイル名
+        document.body.appendChild(a)
+        a.click()                         // 擬似クリックで即時ダウンロード開始！
+        
+        // 後片付け
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+
+        console.log('🎉 ZIPパッケージのダウンロードが完了しました！')
+
+      } catch (error) {
+        console.error('ビルド通信エラー:', error)
+        alert('❌ 通信エラーが発生しました')
+      }
+    }
+
+
   return (
     <div className={styles.container}>
       <div className={styles.partTabs}>
@@ -94,7 +137,10 @@ export function LeftBox({
       
 
       <div className={styles.bottomTab}>
-        <button className={styles.saveButton}>
+        <button 
+          className={styles.saveButton}
+          onClick={handleBuildZip}
+          >
           SAVE as ZIP
         </button>
         <span className={styles.statusMessage}>
