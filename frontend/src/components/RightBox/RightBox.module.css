@@ -99,6 +99,7 @@
 
 .buttonContainer {
   display: flex;
+  flex-direction: column;
   gap: 10px; /* ボタン間の隙間 */
   align-items: center;
 }
@@ -116,15 +117,20 @@ Button{
 }
 
 .uploadButton {
+  flex: 1;
   background-color: #2ecc71;
   
+}
+
+.layerTab{
+    width: 100%;
+    flex: 1;
 }
 
 .uploadButton:hover:not(:disabled) {
   background-color: #27ae60;
   
 }
-
 
 .disabled {
   background-color: #444;
