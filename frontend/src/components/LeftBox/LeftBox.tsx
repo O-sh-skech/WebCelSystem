@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { SpaceSliders } from './Sliders/SpaceSliders'
 import styles from './LeftBox.module.css'
 import type { CelParameter } from '../Types/CelParameter'
@@ -40,6 +41,7 @@ export function LeftBox({
       return { color: '#cdd84a', text: '一部完了 (未配置のパーツあり)' } // 黄（テキストが常にスッキリ！）
     }
     }
+    const [isSplitMode, setIsSplitMode] = useState(false)
     const progressStatus = getProgressStatus()
     const sliderColor = progressStatus.color
     const partsMessage = progressStatus.text
@@ -64,8 +66,32 @@ export function LeftBox({
         currentPart={currentPart}
         values={sliderValues}
         onChange={onSliderChange}
-        sliderColor={sliderColor}  // 🌟 spaceSliderに投げる進捗色
-      />
+        sliderColor={sliderColor}
+        // 🌟 追加のPropsを流し込む
+        isSplitMode={isSplitMode}
+        progressList={progressList}
+      >
+        {/* ✂️ SPILIT MODE ボタンをトグル（ON/OFF）仕様にアップデート */}
+        <button 
+          onClick={() => setIsSplitMode(!isSplitMode)}
+          style={{
+            marginTop: '15px',
+            width: '100%',
+            padding: '10px',
+            backgroundColor: isSplitMode ? '#d9534f' : '#3a3a4a', // ONの時は赤っぽく
+            color: '#fff',
+            border: isSplitMode ? '1px solid #ff7774' : '1px solid #555',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            boxShadow: isSplitMode ? '0 0 10px rgba(217, 83, 79, 0.5)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          {isSplitMode ? '✂️ EXIT SPLIT MODE (解除)' : '✂️ SPLIT MODE (分割)'}
+        </button>
+      </SpaceSliders>
+      
 
       <div className={styles.bottomTab}>
         <button className={styles.saveButton}>
