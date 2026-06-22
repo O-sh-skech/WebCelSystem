@@ -85,6 +85,29 @@ export function RightBox({
 
   const expectedFileName = `${currentKey}.png`
 
+  const handleDrop = (
+    event: React.DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault()
+
+    const file =
+      event.dataTransfer.files?.[0] ?? null
+
+    handleFileUpload(file)
+  }
+
+  const handleDragOver = (
+    event: React.DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault()
+  }
+
+  const handleFileUpload = (file: File | null) => {
+  if (!file) return
+
+  onUploadSubmit(file)
+  }
+
   const handleUploadButtonClick = () => {
     console.log('アップロードボタンが押されました')
     const input = document.createElement('input')
@@ -123,7 +146,10 @@ export function RightBox({
       </div>
 
       {/* 🌟 変更点: orderedLayers（並び替え対応配列）を元に重ね合わせ描画 */}
-      <div className={styles.dropZone}>
+      <div className={styles.dropZone}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+      >
         {orderedLayers.length > 0 ? (
           <>
             {orderedLayers.map((layer, index) => (
@@ -133,7 +159,7 @@ export function RightBox({
                 alt={layer.partName}
                 className={`${styles.previewImage} ${styles.layerImage}`}
                 style={{ 
-                  zIndex: orderedLayers.length - index, // 🌟 配列の後ろにあるパーツほど上に重なる
+                  zIndex: index, // 🌟 配列の後ろにあるパーツほど上に重なる
                   position: 'absolute',
                   top: 0, left: 0, width: '100%', height: '100%'
                 }}
