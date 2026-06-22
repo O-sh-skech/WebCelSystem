@@ -29,12 +29,32 @@
   background-color: #4a90e2;
 }
 
-.status {
+.bottomTab {
   margin-top: 15px;
   padding: 12px;
   border-radius: 6px;
   background-color: #15151c;
+  display: flex;
   font-size: 12px;
   font-family: monospace;
   color: #aaa;
+}
+
+Button{
+  flex: 1;
+  font-family: "Pixelify Sans", sans-serif;
+  width: 100%;
+  padding: 12px;
+  border-radius: 6px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+  color: white;
+}
+
+.statusMessage{
+  flex: 1;
+
 }

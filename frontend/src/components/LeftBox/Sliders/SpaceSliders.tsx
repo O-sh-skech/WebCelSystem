@@ -34,7 +34,7 @@ export const SpaceSliders: React.FC<SpaceSlidersProps> = ({ currentPart, values,
         {parts.map((part) => (
           <div key={part} style={{ width: `${100 / parts.length}%`, paddingLeft: '30px', paddingRight: '30px', boxSizing: 'border-box' }}>
             <h3 style={{ margin: '0 0 20px 0', color: '#fff', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '16px' }}>
-              🎯 {part} 空間パラメータ
+              {part} 空間パラメータ
             </h3>
             
             {/* 🌟 3つの子スライダーにすべて color を引き渡す */}
